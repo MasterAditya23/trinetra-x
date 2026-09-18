@@ -72,19 +72,40 @@ def get_events():
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
     conn = get_db_connection()
-    
-    # [DATABASE] Calculate totals directly from SQLite using SQL COUNT queries
     total_events = conn.execute('SELECT COUNT(*) FROM events').fetchone()[0]
     online_cameras = conn.execute("SELECT COUNT(*) FROM cameras WHERE status = 'ONLINE'").fetchone()[0]
     offline_cameras = conn.execute("SELECT COUNT(*) FROM cameras WHERE status = 'OFFLINE'").fetchone()[0]
-    
     conn.close()
 
-    # [API RESPONSE] Return the aggregated dashboard statistics
     return jsonify({
         "total_events": total_events,
         "active_cameras": online_cameras,
         "offline_cameras": offline_cameras
+    }), 200
+
+# [API ROUTE] GET Single Event endpoint to fetch details of a specific intrusion for the dashboard modal
+@app.route('/api/events/<int:event_id>', methods=['GET'])
+def get_single_event(event_id):
+    conn = get_db_connection()
+    # [DATABASE] Fetch the single event by its ID
+    event = conn.execute('SELECT * FROM events WHERE id = ?', (event_id,)).fetchone()
+    conn.close()
+
+    # [DATA VALIDATION] If the event doesn't exist, return a 404 Not Found error
+    if event is None:
+        return jsonify({"error": "Event not found"}), 404
+
+    # [API RESPONSE] Return the single event object
+    return jsonify({
+        "id": event["id"],
+        "camera_id": event["camera_id"],
+        "timestamp": event["timestamp"],
+        "event_type": event["event_type"],
+        "object_type": event["object_type"],
+        "confidence": event["confidence"],
+        "zone": event["zone"],
+        "snapshot": event["snapshot_path"],
+        "status": event["status"]
     }), 200
 
 # [API ROUTE] POST Events endpoint to receive intrusion detections from Member 1 (Vision)
