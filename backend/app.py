@@ -45,16 +45,40 @@ def get_cameras():
         
     return jsonify(camera_list), 200
 
+# [API ROUTE] GET Events endpoint to provide the frontend with the history of intrusions
+@app.route('/api/events', methods=['GET'])
+def get_events():
+    # [DATABASE] Fetch all events, ordering by the newest timestamps first
+    conn = get_db_connection()
+    events = conn.execute('SELECT * FROM events ORDER BY timestamp DESC').fetchall()
+    conn.close()
+
+    # [DATA FORMATTING] Convert the database rows into a list of JSON objects
+    event_list = []
+    for evt in events:
+        event_list.append({
+            "id": evt["id"],
+            "camera_id": evt["camera_id"],
+            "timestamp": evt["timestamp"],
+            "event_type": evt["event_type"],
+            "object_type": evt["object_type"],
+            "confidence": evt["confidence"],
+            "zone": evt["zone"],
+            "snapshot": evt["snapshot_path"],
+            "status": evt["status"]
+        })
+        
+    # [API RESPONSE] Return the events list
+    return jsonify(event_list), 200
+
 # [API ROUTE] POST Events endpoint to receive intrusion detections from Member 1 (Vision)
 @app.route('/api/events', methods=['POST'])
 def create_event():
-    # [DATA VALIDATION] Extract JSON payload from the incoming Vision request
     data = request.get_json()
     
     if not data or not data.get('camera_id') or not data.get('event_type'):
         return jsonify({"error": "Invalid data, camera_id and event_type are required"}), 400
 
-    # [DATABASE] Insert the new event into the SQLite database safely
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -76,7 +100,6 @@ def create_event():
     event_id = cursor.lastrowid
     conn.close()
 
-    # [API RESPONSE] Return success message with the generated Event ID
     return jsonify({"message": "Event created successfully", "event_id": event_id}), 201
 
 # [EXECUTION] Start the Flask server on port 5000
