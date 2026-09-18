@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 # [INITIALIZATION] Create the main Flask application instance
@@ -18,7 +18,7 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-# [API ROUTE] Health check endpoint to verify the server is running (Required by Shared API Contract)
+# [API ROUTE] Health check endpoint to verify the server is running
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({
@@ -30,12 +30,10 @@ def health_check():
 # [API ROUTE] Cameras endpoint to provide the frontend with the list of active cameras
 @app.route('/api/cameras', methods=['GET'])
 def get_cameras():
-    # [DATABASE] Open connection and fetch all camera records
     conn = get_db_connection()
     cameras = conn.execute('SELECT * FROM cameras').fetchall()
     conn.close()
 
-    # [DATA FORMATTING] Convert database rows into a standard Python list of dictionaries
     camera_list = []
     for cam in cameras:
         camera_list.append({
@@ -45,9 +43,42 @@ def get_cameras():
             "status": cam["status"]
         })
         
-    # [API RESPONSE] Return the formatted list as JSON with a 200 OK status
     return jsonify(camera_list), 200
 
-# [EXECUTION] Start the Flask server on port 5000 (Required by Local Ports Contract)
+# [API ROUTE] POST Events endpoint to receive intrusion detections from Member 1 (Vision)
+@app.route('/api/events', methods=['POST'])
+def create_event():
+    # [DATA VALIDATION] Extract JSON payload from the incoming Vision request
+    data = request.get_json()
+    
+    if not data or not data.get('camera_id') or not data.get('event_type'):
+        return jsonify({"error": "Invalid data, camera_id and event_type are required"}), 400
+
+    # [DATABASE] Insert the new event into the SQLite database safely
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        INSERT INTO events (camera_id, timestamp, event_type, object_type, confidence, zone, snapshot_path, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        data.get('camera_id'),
+        data.get('timestamp'),
+        data.get('event_type'),
+        data.get('object_type'),
+        data.get('confidence'),
+        data.get('zone'),
+        data.get('snapshot'),
+        data.get('status', 'NEW')
+    ))
+    
+    conn.commit()
+    event_id = cursor.lastrowid
+    conn.close()
+
+    # [API RESPONSE] Return success message with the generated Event ID
+    return jsonify({"message": "Event created successfully", "event_id": event_id}), 201
+
+# [EXECUTION] Start the Flask server on port 5000
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
