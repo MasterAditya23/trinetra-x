@@ -48,12 +48,10 @@ def get_cameras():
 # [API ROUTE] GET Events endpoint to provide the frontend with the history of intrusions
 @app.route('/api/events', methods=['GET'])
 def get_events():
-    # [DATABASE] Fetch all events, ordering by the newest timestamps first
     conn = get_db_connection()
     events = conn.execute('SELECT * FROM events ORDER BY timestamp DESC').fetchall()
     conn.close()
 
-    # [DATA FORMATTING] Convert the database rows into a list of JSON objects
     event_list = []
     for evt in events:
         event_list.append({
@@ -68,8 +66,26 @@ def get_events():
             "status": evt["status"]
         })
         
-    # [API RESPONSE] Return the events list
     return jsonify(event_list), 200
+
+# [API ROUTE] GET Stats endpoint to provide the frontend with dashboard metrics
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    conn = get_db_connection()
+    
+    # [DATABASE] Calculate totals directly from SQLite using SQL COUNT queries
+    total_events = conn.execute('SELECT COUNT(*) FROM events').fetchone()[0]
+    online_cameras = conn.execute("SELECT COUNT(*) FROM cameras WHERE status = 'ONLINE'").fetchone()[0]
+    offline_cameras = conn.execute("SELECT COUNT(*) FROM cameras WHERE status = 'OFFLINE'").fetchone()[0]
+    
+    conn.close()
+
+    # [API RESPONSE] Return the aggregated dashboard statistics
+    return jsonify({
+        "total_events": total_events,
+        "active_cameras": online_cameras,
+        "offline_cameras": offline_cameras
+    }), 200
 
 # [API ROUTE] POST Events endpoint to receive intrusion detections from Member 1 (Vision)
 @app.route('/api/events', methods=['POST'])
