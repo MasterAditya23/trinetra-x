@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 # [INITIALIZATION] Create the main Flask application instance
@@ -9,8 +9,9 @@ app = Flask(__name__)
 # [SECURITY] Enable CORS so Member 3's React dashboard can securely communicate with this backend
 CORS(app)
 
-# [CONFIGURATION] Define the absolute path to the SQLite database file
+# [CONFIGURATION] Define absolute paths for the database and the shared snapshots folder
 DB_PATH = os.path.join(os.path.dirname(__file__), 'database', 'trinetra.db')
+SNAPSHOTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'snapshots'))
 
 # [DATABASE] Helper function to securely connect to the database and return dictionary-like rows
 def get_db_connection():
@@ -72,7 +73,6 @@ def get_events():
 @app.route('/api/events/recent', methods=['GET'])
 def get_recent_events():
     conn = get_db_connection()
-    # [DATABASE] Fetch only the 5 most recent events to keep the dashboard widget fast
     events = conn.execute('SELECT * FROM events ORDER BY timestamp DESC LIMIT 5').fetchall()
     conn.close()
 
@@ -159,6 +159,12 @@ def create_event():
     conn.close()
 
     return jsonify({"message": "Event created successfully", "event_id": event_id}), 201
+
+# [API ROUTE] Serve static evidence snapshots to the frontend dashboard
+@app.route('/snapshots/<path:filename>', methods=['GET'])
+def serve_snapshot(filename):
+    # [SECURITY] send_from_directory automatically prevents directory traversal attacks
+    return send_from_directory(SNAPSHOTS_DIR, filename)
 
 # [EXECUTION] Start the Flask server on port 5000
 if __name__ == '__main__':
