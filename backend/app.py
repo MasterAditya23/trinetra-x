@@ -45,11 +45,35 @@ def get_cameras():
         
     return jsonify(camera_list), 200
 
-# [API ROUTE] GET Events endpoint to provide the frontend with the history of intrusions
+# [API ROUTE] GET Events endpoint to provide the frontend with the full history of intrusions
 @app.route('/api/events', methods=['GET'])
 def get_events():
     conn = get_db_connection()
     events = conn.execute('SELECT * FROM events ORDER BY timestamp DESC').fetchall()
+    conn.close()
+
+    event_list = []
+    for evt in events:
+        event_list.append({
+            "id": evt["id"],
+            "camera_id": evt["camera_id"],
+            "timestamp": evt["timestamp"],
+            "event_type": evt["event_type"],
+            "object_type": evt["object_type"],
+            "confidence": evt["confidence"],
+            "zone": evt["zone"],
+            "snapshot": evt["snapshot_path"],
+            "status": evt["status"]
+        })
+        
+    return jsonify(event_list), 200
+
+# [API ROUTE] GET Recent Events endpoint to feed the dashboard's "Recent Intrusions" widget (Limit 5)
+@app.route('/api/events/recent', methods=['GET'])
+def get_recent_events():
+    conn = get_db_connection()
+    # [DATABASE] Fetch only the 5 most recent events to keep the dashboard widget fast
+    events = conn.execute('SELECT * FROM events ORDER BY timestamp DESC LIMIT 5').fetchall()
     conn.close()
 
     event_list = []
@@ -87,15 +111,12 @@ def get_stats():
 @app.route('/api/events/<int:event_id>', methods=['GET'])
 def get_single_event(event_id):
     conn = get_db_connection()
-    # [DATABASE] Fetch the single event by its ID
     event = conn.execute('SELECT * FROM events WHERE id = ?', (event_id,)).fetchone()
     conn.close()
 
-    # [DATA VALIDATION] If the event doesn't exist, return a 404 Not Found error
     if event is None:
         return jsonify({"error": "Event not found"}), 404
 
-    # [API RESPONSE] Return the single event object
     return jsonify({
         "id": event["id"],
         "camera_id": event["camera_id"],
